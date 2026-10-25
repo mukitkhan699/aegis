@@ -1,0 +1,26 @@
+{
+  "name": "aegis-login",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A small, dependency-free login system with custom authentication.",
+  "license": "MIT",
+  "author": "Aegis Login contributors",
+  "keywords": [
+    "authentication",
+    "login",
+    "sessions",
+    "csrf",
+    "sqlite",
+    "nodejs",
+    "security"
+  ],
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.js",
+    "dev": "node --watch --env-file-if-exists=.env server.js",
+    "check": "node --check server.js && node --check public/app.js"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aegis Login System - Documentation</title>
+    <style>
+        :root {
+            --bg: #080c0a;
+            --surface: #0e1512;
+            --text: #f0f5ef;
+            --muted: #98a79e;
+            --muted-strong: #bdc9c2;
+            --line: rgba(226, 243, 231, 0.1);
+            --line-strong: rgba(226, 243, 231, 0.17);
+            --accent: #c4f77b;
+            --accent-soft: rgba(196, 247, 123, 0.12);
+            --code-bg: #0a100d;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            padding: 0;
+        }
+        
+        header {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 34%), var(--surface);
+            border-bottom: 1px solid var(--line);
+            padding: 60px 20px;
+            text-align: center;
+        }
+        
+        header h1 {
+            font-size: 3rem;
+            font-weight: 650;
+            letter-spacing: -0.05em;
+            margin-bottom: 10px;
+        }
+        
+        header h1 span {
+            color: var(--accent);
+            font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+            font-style: italic;
+            font-weight: 400;
+        }
+        
+        header p {
+            color: var(--muted);
+            font-size: 1.1rem;
+        }
+        
+        nav {
+            background: var(--surface);
+            border-bottom: 1px solid var(--line);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(22px);
+        }
+        
+        nav ul {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 30px;
+            list-style: none;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 15px 20px;
+        }
+        
+        nav a {
+            color: var(--muted);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+        
+        nav a:hover {
+            color: var(--accent);
+        }
+        
+        main {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 60px 20px;
+        }
+        
+        section {
+            margin-bottom: 80px;
+        }
+        
+        h2 {
+            font-size: 2rem;
+            font-weight: 640;
+            letter-spacing: -0.04em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--line);
+            color: var(--text);
+        }
+        
+        h3 {
+            font-size: 1.4rem;
+            font-weight: 620;
+            letter-spacing: -0.03em;
+            margin: 40px 0 15px;
+            color: var(--muted-strong);
+        }
+        
+        h4 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin: 30px 0 10px;
+            color: var(--muted-strong);
+        }
+        
+        p {
+            color: var(--muted-strong);
+            margin-bottom: 15px;
+        }
+        
+        ul, ol {
+            color: var(--muted-strong);
+            margin-left: 20px;
+            margin-bottom: 20px;
+        }
+        
+        li {
+            margin-bottom: 8px;
+        }
+        
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        
+        .feature-card {
+            background: linear-gradient(145deg, rgba(255, 255, 255, 0.035), transparent 34%), var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 25px;
+        }
+        
+        .feature-card h4 {
+            color: var(--accent);
+            margin-top: 0;
+            margin-bottom: 10px;
+        }
+        
+        .feature-card p {
+            margin-bottom: 0;
+            font-size: 0.95rem;
+        }
+        
+        .code-block {
+            background: var(--code-bg);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 20px;
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+        
+        .code-block code {
+            font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+            font-size: 0.9rem;
+            color: var(--muted-strong);
+            line-height: 1.6;
+        }
+        
+        .api-endpoint {
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 20px;
+            margin: 15px 0;
+        }
+        
+        .api-endpoint .method {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.8rem;
+            margin-right: 10px;
+        }
+        
+        .method-get {
+            background: rgba(99, 218, 137, 0.15);
+            color: #a8f1c0;
+        }
+        
+        .method-post {
+            background: rgba(196, 247, 123, 0.15);
+            color: var(--accent);
+        }
+        
+        .api-endpoint .path {
+            font-family: 'Fira Code', monospace;
+            font-size: 0.95rem;
+            color: var(--text);
+        }
+        
+        .api-endpoint .description {
+            margin-top: 10px;
+            color: var(--muted);
+            font-size: 0.9rem;
+        }
+        
+        .security-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: var(--surface);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .security-table th,
+        .security-table td {
+            padding: 12px 16px;
+            text-align: left;
+            border: 1px solid var(--line);
+        }
+        
+        .security-table th {
+            background: rgba(196, 247, 123, 0.08);
+            color: var(--accent);
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        
+        .security-table td {
+            color: var(--muted-strong);
+            font-size: 0.9rem;
+        }
+        
+        .security-table tr:nth-child(even) {
+            background: rgba(255, 255, 255, 0.01);
+        }
+        
+        footer {
+            text-align: center;
+            padding: 40px 20px;
+            border-top: 1px solid var(--line);
+            color: var(--muted);
+            background: var(--surface);
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            background: var(--accent-soft);
+            color: var(--accent);
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 5px;
+        }
+        
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 2.2rem;
+            }
+            
+            nav ul {
+                gap: 15px;
+            }
+            
+            main {
+                padding: 40px 15px;
+            }
+            
+            .feature-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Aegis <span>Login System</span></h1>
+        <p>Simple but Secure Custom Authentication System</p>
+    </header>
+    
+    <nav>
+        <ul>
+            <li><a href="#overview">Overview</a></li>
+            <li><a href="#architecture">Architecture</a></li>
+            <li><a href="#security">Security Features</a></li>
+            <li><a href="#api">API Endpoints</a></li>
+            <li><a href="#setup">Setup & Usage</a></li>
+            <li><a href="#configuration">Configuration</a></li>
+            <li><a href="#database">Database Schema</a></li>
+        </ul>
+    </nav>
+    
+    <main>
+        <section id="overview">
+            <h2>Overview</h2>
+            <p>Aegis is a dependency-free, self-hosted authentication portal built with Node.js using only built-in modules. It provides a complete authentication solution with modern security practices, a polished responsive UI, and no external dependencies.</p>
+            <p>The system is designed with security-first principles, implementing defense-in-depth strategies to protect user credentials and sessions.</p>
+        </section>
+        
+        <section id="architecture">
+            <h2>Architecture</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>Backend (server.js)</h4>
+                    <p>Node.js ESM server using only built-in modules (http, crypto, node:sqlite). Handles routing, authentication logic, session management, and security middleware.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Frontend (public/)</h4>
+                    <p>Responsive dark-themed UI with vanilla JavaScript. Includes tabbed login/register forms, real-time validation, and an authenticated dashboard.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Storage (SQLite)</h4>
+                    <p>Local SQLite database using Node's built-in sqlite module. Uses WAL mode, foreign keys, and proper indexing for performance and integrity.</p>
+                </div>
+            </div>
+        </section>
+        
+        <section id="security">
+            <h2>Security Features</h2>
+            
+            <h3>Password Security</h3>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>Scrypt Hashing</h4>
+                    <p>Passwords are hashed using scrypt with parameters N=32768, r=8, p=1, generating 64-byte keys with 16-byte random salts.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Constant-Time Comparison</h4>
+                    <p>All cryptographic comparisons use <code>crypto.timingSafeEqual()</code> to prevent timing-based attacks.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>User Enumeration Protection</h4>
+                    <p>Uses a pre-computed dummy password hash for non-existent users to ensure consistent timing regardless of account existence.</p>
+                </div>
+            </div>
+            
+            <h3>Session Management</h3>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <h4>Opaque Tokens</h4>
+                    <p>32-byte cryptographically secure random tokens are generated using <code>crypto.randomBytes()</code> and only SHA-256 hashes are stored in the database.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Secure Cookies</h4>
+                    <p>Cookies are marked HttpOnly, SameSite=Strict, and Secure (auto-detected based on connection). Sessions rotate on login, register, and logout.</p>
+                </div>
+                <div class="feature-card">
+                    <h4>Session TTL</h4>
+                    <p>Authenticated sessions expire after 24 hours, anonymous sessions after 1 hour. Expired sessions are automatically cleaned up.</p>
+                </div>
+            </div>
+            
+            <h3>Attack Prevention</h3>
+            <table class="security-table">
+                <thead>
+                    <tr>
+                        <th>Protection</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>CSRF Protection</strong></td>
+                        <td>Per-session CSRF tokens validated via X-CSRF-Token header on all state-changing requests with constant-time comparison.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Origin Validation</strong></td>
+                        <td>Checks Origin header against request host for state-changing requests. Rejects cross-origin requests.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Fetch Metadata</strong></td>
+                        <td>Validates Sec-Fetch-Site header, allowing only same-origin or direct navigation requests.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Rate Limiting</strong></td>
+                        <td>Sliding window rate limiting on logins (30/IP, 6/account per 15min), registrations (8/IP per hour), and session creation (60/IP per hour).</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Request Hardening</strong></td>
+                        <td>JSON-only for POST, 8KB body limit, method allowlists, input validation, and connection timeouts (15s request, 10s headers, 5s keep-alive).</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Input Validation</strong></td>
+                        <td>Usernames: 3-32 chars, alphanumeric and underscores only. Passwords: 12-1024 characters. Case-insensitive username uniqueness.</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <h3>Security Headers</h3>
+            <table class="security-table">
+                <thead>
+                    <tr>
+                        <th>Header</th>
+                        <th>Value</th>
+                        <th>Purpose</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Content-Security-Policy</td>
+                        <td><code>default-src 'none'; script-src 'self'; style-src 'self'; ...</code></td>
+                        <td>Prevents XSS by restricting resource loading</td>
+                    </tr>
+                    <tr>
+                        <td>Strict-Transport-Security</td>
+                        <td><code>max-age=31536000; includeSubDomains</code></td>
+                        <td>Forces HTTPS (when secure connection detected)</td>
+                    </tr>
+                    <tr>
+                        <td>Cross-Origin-Opener-Policy</td>
+                        <td><code>same-origin</code></td>
+                        <td>Isolates browsing context</td>
+                    </tr>
+                    <tr>
+                        <td>Cross-Origin-Resource-Policy</td>
+                        <td><code>same-origin</code></td>
+                        <td>Prevents cross-origin resource embedding</td>
+                    </tr>
+                    <tr>
+                        <td>Permissions-Policy</td>
+                        <td><code>camera=(), microphone=(), geolocation=(), payment=(), usb=()</code></td>
+                        <td>Disables sensitive browser features</td>
+                    </tr>
+                    <tr>
+                        <td>Referrer-Policy</td>
+                        <td><code>no-referrer</code></td>
+                        <td>Prevents referrer leakage</td>
+                    </tr>
+                    <tr>
+                        <td>X-Content-Type-Options</td>
+                        <td><code>nosniff</code></td>
+                        <td>Prevents MIME type sniffing</td>
+                    </tr>
+                    <tr>
+                        <td>X-Frame-Options</td>
+                        <td><code>DENY</code></td>
+                        <td>Prevents clickjacking</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+        
+        <section id="api">
+            <h2>API Endpoints</h2>
+            <p>All endpoints are prefixed with <code>/api/</code>. State-changing endpoints require <code>Content-Type: application/json</code> and a valid <code>X-CSRF-Token</code> header.</p>
+            
+            <div class="api-endpoint">
+                <span class="method method-get">GET</span>
+                <span class="path">/api/session</span>
+                <div class="description">
+                    Returns current session information. If no session exists, creates an anonymous session with a new CSRF token.
+                    <br><strong>Response:</strong> <code>{ authenticated: boolean, user: object|null, csrfToken: string, expiresAt: number }</code>
+                </div>
+            </div>
+            
+            <div class="api-endpoint">
+                <span class="method method-post">POST</span>
+                <span class="path">/api/register</span>
+                <div class="description">
+                    Creates a new user account and establishes an authenticated session.
+                    <br><strong>Body:</strong> <code>{ username: string, password: string }</code>
+                    <br><strong>Validation:</strong> Username 3-32 chars (alphanumeric/underscore), password 12-1024 chars
+                    <br><strong>Response:</strong> <code>{ authenticated: true, user: object, csrfToken: string, expiresAt: number }</code> (201 on success)
+                    <br><strong>Errors:</strong> 400 (invalid input), 409 (username taken), 429 (rate limited), 403 (CSRF/origin)
+                </div>
+            </div>
+            
+            <div class="api-endpoint">
+                <span class="method method-post">POST</span>
+                <span class="path">/api/login</span>
+                <div class="description">
+                    Authenticates an existing user and rotates session.
+                    <br><strong>Body:</strong> <code>{ username: string, password: string }</code>
+                    <br><strong>Response:</strong> <code>{ authenticated: true, user: object, csrfToken: string, expiresAt: number }</code>
+                    <br><strong>Errors:</strong> 401 (invalid credentials), 429 (rate limited), 403 (CSRF/origin)
+                </div>
+            </div>
+            
+            <div class="api-endpoint">
+                <span class="method method-post">POST</span>
+                <span class="path">/api/logout</span>
+                <div class="description">
+                    Terminates current session and creates a new anonymous session.
+                    <br><strong>Body:</strong> <code>{}</code>
+                    <br><strong>Response:</strong> <code>{ authenticated: false, user: null, csrfToken: string, expiresAt: number }</code>
+                    <br><strong>Errors:</strong> 403 (CSRF/origin), 429 (rate limited)
+                </div>
+            </div>
+        </section>
+        
+        <section id="setup">
+            <h2>Setup & Usage</h2>
+            
+            <h3>Prerequisites</h3>
+            <ul>
+                <li>Node.js >= 24 (uses built-in <code>node:sqlite</code>)</li>
+                <li>No external npm dependencies required</li>
+            </ul>
+            
+            <h3>Installation & Running</h3>
+            <div class="code-block">
+                <code>git clone https://github.com/mukitkhan699/aegis-login.git<br>cd aegis-login<br>cp .env.example .env<br>npm start</code>
+            </div>
+            <p>The server will start at <code>http://127.0.0.1:3000</code> by default. <code>npm start</code> loads variables from <code>.env</code> automatically; running <code>node server.js</code> directly uses only exported environment variables.</p>
+            
+            <h3>First Use</h3>
+            <ol>
+                <li>Navigate to <code>http://127.0.0.1:3000</code> in your browser</li>
+                <li>Click "Create account" to register a new user</li>
+                <li>Enter a username (3-32 alphanumeric/underscore) and password (minimum 12 characters)</li>
+                <li>You'll be automatically logged in and redirected to the dashboard</li>
+                <li>Use "Sign out" to end your session</li>
+            </ol>
+        </section>
+        
+        <section id="configuration">
+            <h2>Configuration</h2>
+            <p>Configure the application using environment variables:</p>
+            
+            <table class="security-table">
+                <thead>
+                    <tr>
+                        <th>Variable</th>
+                        <th>Default</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>PORT</code></td>
+                        <td><code>3000</code></td>
+                        <td>Server listening port</td>
+                    </tr>
+                    <tr>
+                        <td><code>HOST</code></td>
+                        <td><code>127.0.0.1</code></td>
+                        <td>Server listening host (use 0.0.0.0 for external access)</td>
+                    </tr>
+                    <tr>
+                        <td><code>DATABASE_PATH</code></td>
+                        <td><code>./data/auth.db</code></td>
+                        <td>Path to SQLite database file</td>
+                    </tr>
+                    <tr>
+                        <td><code>TRUST_PROXY</code></td>
+                        <td><code>undefined</code></td>
+                        <td>Set to <code>1</code> when behind a reverse proxy to respect X-Forwarded headers</td>
+                    </tr>
+                    <tr>
+                        <td><code>COOKIE_SECURE</code></td>
+                        <td><code>auto</code></td>
+                        <td>Set to <code>true</code> or <code>false</code> to override auto-detection of secure cookies</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <h3>Example with Environment Variables</h3>
+            <div class="code-block">
+                <code>PORT=8080 HOST=0.0.0.0 TRUST_PROXY=1 COOKIE_SECURE=true node server.js</code>
+            </div>
+        </section>
+        
+        <section id="database">
+            <h2>Database Schema</h2>
+            <p>The SQLite database is automatically created on first run in the <code>data/</code> directory.</p>
+            
+            <h3>Users Table</h3>
+            <table class="security-table">
+                <thead>
+                    <tr>
+                        <th>Column</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>id</code></td>
+                        <td>INTEGER PRIMARY KEY AUTOINCREMENT</td>
+                        <td>Unique user identifier</td>
+                    </tr>
+                    <tr>
+                        <td><code>username</code></td>
+                        <td>TEXT NOT NULL UNIQUE COLLATE NOCASE</td>
+                        <td>Username (case-insensitive uniqueness)</td>
+                    </tr>
+                    <tr>
+                        <td><code>password_hash</code></td>
+                        <td>TEXT NOT NULL</td>
+                        <td>Scrypt password hash in format: <code>scrypt$N$r$p$salt$hash</code></td>
+                    </tr>
+                    <tr>
+                        <td><code>created_at</code></td>
+                        <td>INTEGER NOT NULL</td>
+                        <td>Unix timestamp (milliseconds) of account creation</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <h3>Sessions Table</h3>
+            <table class="security-table">
+                <thead>
+                    <tr>
+                        <th>Column</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>token_hash</code></td>
+                        <td>TEXT PRIMARY KEY</td>
+                        <td>SHA-256 hash of the session token</td>
+                    </tr>
+                    <tr>
+                        <td><code>user_id</code></td>
+                        <td>INTEGER REFERENCES users(id) ON DELETE CASCADE</td>
+                        <td>Associated user (NULL for anonymous sessions)</td>
+                    </tr>
+                    <tr>
+                        <td><code>csrf_token</code></td>
+                        <td>TEXT NOT NULL</td>
+                        <td>CSRF token for this session</td>
+                    </tr>
+                    <tr>
+                        <td><code>created_at</code></td>
+                        <td>INTEGER NOT NULL</td>
+                        <td>Unix timestamp of session creation</td>
+                    </tr>
+                    <tr>
+                        <td><code>expires_at</code></td>
+                        <td>INTEGER NOT NULL</td>
+                        <td>Unix timestamp of session expiration</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <h3>Database Features</h3>
+            <ul>
+                <li><strong>WAL Mode:</strong> Write-Ahead Logging for better concurrent access</li>
+                <li><strong>Foreign Keys:</strong> Enabled with CASCADE delete for sessions when users are deleted</li>
+                <li><strong>Secure Delete:</strong> Overwrites deleted data to prevent recovery</li>
+                <li><strong>Busy Timeout:</strong> 5 seconds to handle concurrent access</li>
+                <li><strong>Auto Cleanup:</strong> Expired sessions are deleted every 5 minutes</li>
+                <li><strong>File Permissions:</strong> Database file set to 600 on POSIX systems</li>
+            </ul>
+        </section>
+    </main>
+    
+    <footer>
+        <p>Aegis Login System - Built with security and simplicity in mind</p>
+        <p style="margin-top: 10px; font-size: 0.9rem;">No external dependencies • Pure Node.js built-ins</p>
+    </footer>
+</body>
+</html>

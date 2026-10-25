@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <meta name="theme-color" content="#090d0b">
+    <meta name="description" content="Aegis is a secure, self-hosted authentication portal.">
+    <title>Aegis — Secure access</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="ambient" aria-hidden="true">
+      <span class="orb orb--one"></span>
+      <span class="orb orb--two"></span>
+      <span class="grid"></span>
+    </div>
+
+    <div class="layout">
+      <aside class="brand-panel">
+        <a class="brand" href="/" aria-label="Aegis home">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M12 2.5 20 6v5.2c0 4.9-3.4 9.2-8 10.3-4.6-1.1-8-5.4-8-10.3V6l8-3.5Z" stroke="currentColor" stroke-width="1.6"/>
+              <path d="m8.7 12 2.1 2.1 4.5-4.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </span>
+          <span>Aegis</span>
+        </a>
+
+        <div class="brand-copy">
+          <p class="eyebrow"><span class="pulse" aria-hidden="true"></span>Private by design</p>
+          <h1>One key.<br><span>Total control.</span></h1>
+          <p class="lede">
+            A focused, self-hosted identity portal built around the things that matter:
+            strong passwords, private sessions, and no unnecessary access.
+          </p>
+
+          <ul class="assurance-list">
+            <li>
+              <span class="check" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none">
+                  <path d="m5.5 10.3 2.8 2.8 6.2-6.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <span>
+                <strong>Scrypt password hashing</strong>
+                <small>Passwords are salted and never stored in plain text.</small>
+              </span>
+            </li>
+            <li>
+              <span class="check" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none">
+                  <path d="m5.5 10.3 2.8 2.8 6.2-6.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <span>
+                <strong>Opaque server-side sessions</strong>
+                <small>Only a hashed session token lives in the database.</small>
+              </span>
+            </li>
+            <li>
+              <span class="check" aria-hidden="true">
+                <svg viewBox="0 0 20 20" fill="none">
+                  <path d="m5.5 10.3 2.8 2.8 6.2-6.3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </span>
+              <span>
+                <strong>CSRF and rate limiting</strong>
+                <small>Every state-changing request is verified and throttled.</small>
+              </span>
+            </li>
+          </ul>
+        </div>
+
+        <p class="brand-foot">Built for quiet confidence.</p>
+      </aside>
+
+      <main class="form-panel">
+        <section class="card auth-card" id="auth-card" aria-labelledby="auth-heading">
+          <div class="card-heading">
+            <p class="kicker" id="auth-kicker">Secure access</p>
+            <h2 id="auth-heading">Welcome back</h2>
+            <p id="auth-subtitle">Sign in to continue to your account.</p>
+          </div>
+
+          <div class="tabs" role="tablist" aria-label="Authentication mode">
+            <button class="tab is-active" id="login-tab" type="button" role="tab" aria-selected="true" aria-controls="login-form" tabindex="0">Sign in</button>
+            <button class="tab" id="register-tab" type="button" role="tab" aria-selected="false" aria-controls="register-form" tabindex="-1">Create account</button>
+          </div>
+
+          <p class="message" id="message" role="alert" aria-live="polite"></p>
+
+          <form class="auth-form" id="login-form" role="tabpanel" aria-labelledby="login-tab" novalidate>
+            <label class="field" for="login-username">
+              <span>Username</span>
+              <span class="input-shell">
+                <svg class="input-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <circle cx="10" cy="6.5" r="3.2" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M3.8 17c.5-3.3 3-5.3 6.2-5.3s5.7 2 6.2 5.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <input id="login-username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="32" required>
+              </span>
+            </label>
+
+            <label class="field" for="login-password">
+              <span>Password</span>
+              <span class="input-shell">
+                <svg class="input-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <rect x="4" y="8.5" width="12" height="8" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M6.8 8.5V6.8a3.2 3.2 0 0 1 6.4 0v1.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <input id="login-password" name="password" type="password" autocomplete="current-password" maxlength="1024" required>
+                <button class="password-toggle" type="button" data-password-toggle="login-password" aria-label="Show password">Show</button>
+              </span>
+            </label>
+
+            <button class="primary-button" type="submit">
+              <span class="button-label">Sign in</span>
+              <span class="spinner" aria-hidden="true"></span>
+            </button>
+
+            <p class="form-note">Your session is protected with an HttpOnly, SameSite=Strict cookie.</p>
+          </form>
+
+          <form class="auth-form" id="register-form" role="tabpanel" aria-labelledby="register-tab" novalidate hidden>
+            <label class="field" for="register-username">
+              <span>Username</span>
+              <span class="input-shell">
+                <svg class="input-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <circle cx="10" cy="6.5" r="3.2" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M3.8 17c.5-3.3 3-5.3 6.2-5.3s5.7 2 6.2 5.3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <input id="register-username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" minlength="3" maxlength="32" required>
+              </span>
+            </label>
+
+            <label class="field" for="register-password">
+              <span>Password</span>
+              <span class="input-shell">
+                <svg class="input-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <rect x="4" y="8.5" width="12" height="8" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M6.8 8.5V6.8a3.2 3.2 0 0 1 6.4 0v1.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <input id="register-password" name="password" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required>
+                <button class="password-toggle" type="button" data-password-toggle="register-password" aria-label="Show password">Show</button>
+              </span>
+            </label>
+
+            <label class="field" for="register-confirm">
+              <span>Confirm password</span>
+              <span class="input-shell">
+                <svg class="input-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <rect x="4" y="8.5" width="12" height="8" rx="2" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M6.8 8.5V6.8a3.2 3.2 0 0 1 6.4 0v1.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <input id="register-confirm" name="confirmPassword" type="password" autocomplete="new-password" minlength="12" maxlength="1024" required>
+                <button class="password-toggle" type="button" data-password-toggle="register-confirm" aria-label="Show password">Show</button>
+              </span>
+            </label>
+
+            <p class="form-hint">Use at least 12 characters. A longer passphrase is stronger.</p>
+
+            <button class="primary-button" type="submit">
+              <span class="button-label">Create account</span>
+              <span class="spinner" aria-hidden="true"></span>
+            </button>
+          </form>
+        </section>
+
+        <section class="card dashboard-card" id="dashboard" aria-labelledby="dashboard-heading" hidden>
+          <div class="dashboard-top">
+            <span class="status-badge"><span class="pulse" aria-hidden="true"></span>Authenticated</span>
+            <button class="ghost-button" id="logout-button" type="button">Sign out</button>
+          </div>
+
+          <div class="avatar" id="avatar" aria-hidden="true">A</div>
+          <p class="kicker">Session active</p>
+          <h2 id="dashboard-heading">Welcome back, <span id="current-username"></span>.</h2>
+          <p class="dashboard-copy">You are securely signed in. This is your private account area.</p>
+
+          <p class="message" id="dashboard-message" role="status" aria-live="polite"></p>
+
+          <dl class="account-grid">
+            <div>
+              <dt>Member since</dt>
+              <dd id="member-since">—</dd>
+            </div>
+            <div>
+              <dt>Session expires</dt>
+              <dd id="session-expiry">—</dd>
+            </div>
+          </dl>
+
+          <div class="security-callout">
+            <span class="callout-icon" aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="none">
+                <path d="M10 2.6 16 5v4.1c0 3.8-2.5 7.1-6 8-3.5-.9-6-4.2-6-8V5l6-2.4Z" stroke="currentColor" stroke-width="1.5"/>
+                <path d="m7.5 9.8 1.7 1.7 3.4-3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </span>
+            <span>Your session token is stored in an HttpOnly cookie and can be revoked instantly.</span>
+          </div>
+        </section>
+
+        <div class="trust-row">
+          <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <rect x="4.5" y="8.5" width="11" height="8" rx="2" stroke="currentColor" stroke-width="1.4"/>
+            <path d="M7.2 8.5V6.7a2.8 2.8 0 0 1 5.6 0v1.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
+          <span>Scrypt hashing · server-side sessions · CSRF protection</span>
+        </div>
+      </main>
+    </div>
+  </body>
+</html>
