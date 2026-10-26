@@ -25,8 +25,8 @@ reference.
 ## Getting Started
 
 ```bash
-git clone https://github.com/mukitkhan699/aegis-login.git
-cd aegis-login
+git clone https://github.com/mukitkhan699/aegis.git
+cd aegis
 cp .env.example .env
 npm start
 ```
