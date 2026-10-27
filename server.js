@@ -308,24 +308,9 @@ async function handleSession(req, res) {
   let session = getSessionFromRequest(req);
 
   if (!session) {
-    // Do not create DB sessions on unauthenticated GET by default; return 401/anonymous state
-    // but to remain compatible with existing flow, still issue a stateless response
-    // Create anonymous session only if no cookie presented? Keep behavior but note - per #6 we avoid creating row
-    // However existing clients expect anonymous session; better to still create but rate limit strictly
-    const clientIp = getClientIp(req);
-    const ipKey = hashLimiterKey(`anon:${clientIp}`);
-    const retryAfterAnon = sessionCreationByIp.check(`anon:${ipKey}`);
-    if (retryAfterAnon > 0) {
-      throw new HttpError(
-        429,
-        'Too many requests. Please try again later.',
-        'RATE_LIMITED',
-        { 'Retry-After': String(retryAfterAnon) },
-      );
-    }
-    sessionCreationByIp.record(`anon:${ipKey}`);
-    session = createSession(null);
-    setSessionCookie(req, res, session);
+    // Do not create server-side sessions on unauthenticated GET (per #6)
+    // Return anonymous state without creating DB row
+    throw new HttpError(401, 'No active session.', 'SESSION_REQUIRED');
   }
 
   const user = session.userId
@@ -603,7 +588,7 @@ function requireSessionWithCsrf(req) {
 }
 
 function getSessionFromRequest(req) {
-  const token = getCookie(req, COOKIE_NAME_FALLBACK) || getCookie(req, '__Host-sid');
+  const token = getCookie(req) || getCookie(req, COOKIE_NAME_FALLBACK) || getCookie(req, '__Host-sid');
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) {
     return null;
   }
@@ -682,8 +667,8 @@ function getCookie(req, name) {
   const header = req.headers.cookie;
   if (typeof header !== 'string' || header.length > 8192) return null;
 
-  // try both __Host-sid and sid for compatibility
-  const namesToTry = [name, COOKIE_NAME_FALLBACK, '__Host-sid'];
+  // try specific name if provided, else try common names
+  const namesToTry = name ? [name] : ['__Host-sid', COOKIE_NAME_FALLBACK, COOKIE_NAME];
 
   for (const tryName of namesToTry) {
     for (const part of header.split(';')) {
