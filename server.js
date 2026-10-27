@@ -17,6 +17,10 @@ const HOST = process.env.HOST || '127.0.0.1';
 const DB_PATH = process.env.DATABASE_PATH || join(rootDir, 'data', 'auth.db');
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
 const TRUST_PROXY_HOPS = Math.max(0, Number.parseInt(process.env.TRUST_PROXY_HOPS || '1', 10) || 1);
+const TRUSTED_PROXY_ADDRESSES = (process.env.TRUSTED_PROXY_ADDRESSES || '')
+  .split(',')
+  .map((p) => p.trim())
+  .filter(Boolean);
 const PUBLIC_HOST = (process.env.PUBLIC_HOST || '').trim().toLowerCase();
 const COOKIE_SECURE = process.env.COOKIE_SECURE;
 const COOKIE_NAME = isSecureRequestGlobal() ? '__Host-sid' : 'sid';
@@ -51,18 +55,29 @@ class SlidingWindowLimiter {
     this.buckets = new Map();
   }
 
+  _prune(key, entries, now) {
+    while (entries.length > 0 && entries[0] <= now - this.windowMs) {
+      entries.shift();
+    }
+    if (entries.length === 0) {
+      this.buckets.delete(key);
+      return true;
+    }
+    // refresh recency for LRU-like behavior
+    if (this.buckets.has(key)) {
+      this.buckets.delete(key);
+      this.buckets.set(key, entries);
+    }
+    return false;
+  }
+
   check(key) {
     const now = Date.now();
     const entries = this.buckets.get(key);
 
     if (!entries) return 0;
 
-    while (entries.length > 0 && entries[0] <= now - this.windowMs) {
-      entries.shift();
-    }
-
-    if (entries.length === 0) {
-      this.buckets.delete(key);
+    if (this._prune(key, entries, now)) {
       return 0;
     }
 
@@ -77,11 +92,17 @@ class SlidingWindowLimiter {
 
     if (!entries) {
       if (this.buckets.size >= this.maxKeys) {
+        // LRU: evict least recently used (first in map iteration)
         const oldestKey = this.buckets.keys().next().value;
         this.buckets.delete(oldestKey);
       }
       entries = [];
       this.buckets.set(key, entries);
+    } else {
+      // move to end to mark as recently used
+      this.buckets.delete(key);
+      this.buckets.set(key, entries);
+      this._prune(key, entries, now);
     }
 
     entries.push(now);
@@ -289,6 +310,7 @@ server.requestTimeout = 15_000;
 server.headersTimeout = 10_000;
 server.keepAliveTimeout = 5_000;
 server.maxHeadersCount = 100;
+server.timeout = 30_000;
 
 server.listen(PORT, HOST, () => {
   console.log(`Aegis is running at http://${HOST}:${PORT}`);
@@ -432,13 +454,14 @@ async function handleLogin(req, res) {
     );
   }
 
+  loginByIp.record(ipKey);
+  loginByAccount.record(accountKey);
+
   const user = statements.userByUsername.get(username);
   const passwordHash = user?.password_hash ?? DUMMY_PASSWORD_HASH;
   const passwordMatches = await verifyPassword(password, passwordHash);
 
   if (!user || !passwordMatches) {
-    loginByIp.record(ipKey);
-    loginByAccount.record(accountKey);
     throw invalidCredentialsError();
   }
 
@@ -657,7 +680,7 @@ function requireSessionWithCsrf(req) {
 }
 
 function getSessionFromRequest(req) {
-  const token = getCookie(req) || getCookie(req, COOKIE_NAME_FALLBACK) || getCookie(req, '__Host-sid');
+  const token = getCookie(req);
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) {
     return null;
   }
@@ -716,18 +739,29 @@ function createSession(user) {
 function setSessionCookie(req, res, session) {
   const maxAge = Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000));
   const secure = isSecureRequest(req);
-  const cookieName = secure ? '__Host-sid' : COOKIE_NAME_FALLBACK;
+  if (secure) {
+    const attributes = [
+      `__Host-sid=${encodeURIComponent(session.token)}`,
+      'Path=/',
+      'HttpOnly',
+      'SameSite=Strict',
+      `Max-Age=${maxAge}`,
+      'Secure',
+    ];
+    // Clear any sid cookie that might exist
+    res.setHeader('Set-Cookie', [
+      attributes.join('; '),
+      `sid=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0;${req.socket.encrypted ? ' Secure;' : ''}`,
+    ]);
+    return;
+  }
   const attributes = [
-    `${cookieName}=${encodeURIComponent(session.token)}`,
+    `${COOKIE_NAME_FALLBACK}=${encodeURIComponent(session.token)}`,
     'Path=/',
     'HttpOnly',
     'SameSite=Strict',
     `Max-Age=${maxAge}`,
   ];
-
-  if (secure) {
-    attributes.push('Secure');
-  }
 
   res.setHeader('Set-Cookie', attributes.join('; '));
 }
@@ -736,9 +770,30 @@ function getCookie(req, name) {
   const header = req.headers.cookie;
   if (typeof header !== 'string' || header.length > 8192) return null;
 
-  // try specific name if provided, else try common names
-  const namesToTry = name ? [name] : ['__Host-sid', COOKIE_NAME_FALLBACK, COOKIE_NAME];
+  const secure = isSecureRequest(req);
+  // On secure deployments, only accept __Host-sid
+  if (secure) {
+    const namesToTry = name === '__Host-sid' || !name ? ['__Host-sid'] : [name];
+    for (const tryName of namesToTry) {
+      if (tryName !== '__Host-sid') continue;
+      for (const part of header.split(';')) {
+        const separator = part.indexOf('=');
+        if (separator === -1) continue;
 
+        const key = part.slice(0, separator).trim();
+        if (key !== '__Host-sid') continue;
+
+        try {
+          return decodeURIComponent(part.slice(separator + 1).trim());
+        } catch {
+          return null;
+        }
+      }
+    }
+    return null;
+  }
+
+  const namesToTry = name ? [name] : [COOKIE_NAME_FALLBACK, COOKIE_NAME];
   for (const tryName of namesToTry) {
     for (const part of header.split(';')) {
       const separator = part.indexOf('=');
@@ -759,30 +814,28 @@ function getCookie(req, name) {
 }
 
 function getClientIp(req) {
-  if (TRUST_PROXY) {
+  const remote = req.socket.remoteAddress || 'unknown';
+  const isTrustedProxy = TRUST_PROXY && (TRUSTED_PROXY_ADDRESSES.length === 0 || TRUSTED_PROXY_ADDRESSES.includes(remote));
+
+  if (isTrustedProxy) {
     const forwardedFor = req.headers['x-forwarded-for'];
     if (typeof forwardedFor === 'string') {
       if (forwardedFor.length > MAX_HEADER_VALUE_BYTES) {
-        return req.socket.remoteAddress || 'unknown';
+        return isIP(remote) ? remote : 'unknown';
       }
       const parts = forwardedFor.split(',').map((p) => p.trim()).filter(Boolean);
-      if (parts.length === 0) {
-        // fall through
-      } else {
+      if (parts.length > 0) {
         const hopIndex = parts.length - Math.max(1, TRUST_PROXY_HOPS);
         const candidate = parts[hopIndex >= 0 ? hopIndex : 0];
         if (isIP(candidate)) {
           return candidate;
         }
-        // if not valid IP, fall back to socket address
       }
     }
   }
 
-  const remote = req.socket.remoteAddress || 'unknown';
   if (isIP(remote)) return remote;
   if (remote === 'unknown') return 'unknown';
-  // try to normalize IPv6 mapped etc not necessary
   return remote;
 }
 
@@ -804,18 +857,18 @@ function isSecureRequest(req) {
   if (COOKIE_SECURE === 'false') return false;
   if (req.socket.encrypted) return true;
 
-  if (TRUST_PROXY) {
+  const remote = req.socket.remoteAddress || 'unknown';
+  const isTrustedProxy = TRUST_PROXY && (TRUSTED_PROXY_ADDRESSES.length === 0 || TRUSTED_PROXY_ADDRESSES.includes(remote));
+
+  if (isTrustedProxy) {
     const forwardedProto = req.headers['x-forwarded-proto'];
     if (typeof forwardedProto === 'string') {
       if (forwardedProto.length > MAX_HEADER_VALUE_BYTES) {
         return req.socket.encrypted === true;
       }
-      const remote = req.socket.remoteAddress;
-      // Only trust proto if immediate peer is trusted? We don't know proxy allowlist
-      // but per best practice, only trust when explicitly behind trusted proxy; still validate
       const parts = forwardedProto.split(',').map((p) => p.trim().toLowerCase());
       if (parts.length > 0) {
-        return parts[parts.length - Math.max(1, TRUST_PROXY_HOPS)] === 'https' || parts[0] === 'https';
+        return parts[parts.length - Math.max(1, TRUST_PROXY_HOPS)] === 'https';
       }
     }
   }
