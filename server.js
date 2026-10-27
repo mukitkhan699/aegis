@@ -187,7 +187,65 @@ const statements = {
   deleteExpiredSessions: db.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
 };
 
-const DUMMY_PASSWORD_HASH = await hashPassword(randomBytes(32).toString('base64url'));
+class Semaphore {
+  constructor(max) {
+    this.max = max;
+    this.active = 0;
+    this.queue = [];
+  }
+
+  acquire() {
+    if (this.active < this.max) {
+      this.active++;
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+      const entry = { resolve, timeout: null };
+      entry.timeout = setTimeout(() => {
+        const idx = this.queue.indexOf(entry);
+        if (idx >= 0) this.queue.splice(idx, 1);
+        reject(new HttpError(503, 'Service temporarily unavailable.', 'SERVICE_BUSY'));
+      }, 5000);
+      this.queue.push(entry);
+    }).then(() => {
+      this.active++;
+    });
+  }
+
+  release() {
+    this.active = Math.max(0, this.active - 1);
+    const next = this.queue.shift();
+    if (next) {
+      if (next.timeout) clearTimeout(next.timeout);
+      next.resolve();
+    }
+  }
+}
+
+const scryptSemaphore = new Semaphore(SCRYPT_MAX_CONCURRENT);
+
+const DUMMY_PASSWORD_HASH = await (async () => {
+  await scryptSemaphore.acquire();
+  try {
+    const salt = randomBytes(16);
+    const derivedKey = await scrypt(randomBytes(32).toString('base64url'), salt, SCRYPT_KEY_LENGTH, {
+      N: SCRYPT_N,
+      r: SCRYPT_R,
+      p: SCRYPT_P,
+      maxmem: SCRYPT_MAX_MEMORY,
+    });
+    return [
+      'scrypt',
+      SCRYPT_N,
+      SCRYPT_R,
+      SCRYPT_P,
+      salt.toString('base64url'),
+      derivedKey.toString('base64url'),
+    ].join('$');
+  } finally {
+    scryptSemaphore.release();
+  }
+})();
 const staticFiles = await loadStaticFiles();
 const sessionSweepTimer = setInterval(() => {
   statements.deleteExpiredSessions.run(Date.now());
@@ -831,43 +889,6 @@ async function readJsonBody(req) {
     throw new HttpError(400, 'Invalid JSON request body.', 'INVALID_JSON');
   }
 }
-
-class Semaphore {
-  constructor(max) {
-    this.max = max;
-    this.active = 0;
-    this.queue = [];
-  }
-
-  async acquire() {
-    if (this.active < this.max) {
-      this.active++;
-      return;
-    }
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        const idx = this.queue.indexOf(entry);
-        if (idx >= 0) this.queue.splice(idx, 1);
-        reject(new HttpError(503, 'Service temporarily unavailable.', 'SERVICE_BUSY'));
-      }, 5000);
-      const entry = { resolve, timeout };
-      this.queue.push(entry);
-    }).then(() => {
-      this.active++;
-    });
-  }
-
-  release() {
-    this.active = Math.max(0, this.active - 1);
-    const next = this.queue.shift();
-    if (next) {
-      clearTimeout(next.timeout);
-      next.resolve();
-    }
-  }
-}
-
-const scryptSemaphore = new Semaphore(SCRYPT_MAX_CONCURRENT);
 
 async function hashPassword(password) {
   await scryptSemaphore.acquire();
