@@ -366,9 +366,20 @@ async function handleSession(req, res) {
   let session = getSessionFromRequest(req);
 
   if (!session) {
-    // Do not create server-side sessions on unauthenticated GET (per #6)
-    // Return anonymous state without creating DB row
-    throw new HttpError(401, 'No active session.', 'SESSION_REQUIRED');
+    const clientIp = getClientIp(req);
+    const ipKey = hashLimiterKey(`anon:${clientIp}`);
+    const retryAfterAnon = sessionCreationByIp.check(`anon:${ipKey}`);
+    if (retryAfterAnon > 0) {
+      throw new HttpError(
+        429,
+        'Too many requests. Please try again later.',
+        'RATE_LIMITED',
+        { 'Retry-After': String(retryAfterAnon) },
+      );
+    }
+    sessionCreationByIp.record(`anon:${ipKey}`);
+    session = createSession(null);
+    setSessionCookie(req, res, session);
   }
 
   const user = session.userId
