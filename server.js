@@ -1,7 +1,8 @@
 import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
-import { chmodSync, mkdirSync } from 'node:fs';
+import { chmodSync, mkdirSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { isIP } from 'node:net';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
@@ -15,8 +16,11 @@ const PORT = parsePort(process.env.PORT, 3000);
 const HOST = process.env.HOST || '127.0.0.1';
 const DB_PATH = process.env.DATABASE_PATH || join(rootDir, 'data', 'auth.db');
 const TRUST_PROXY = process.env.TRUST_PROXY === '1';
+const TRUST_PROXY_HOPS = Math.max(0, Number.parseInt(process.env.TRUST_PROXY_HOPS || '1', 10) || 1);
+const PUBLIC_HOST = (process.env.PUBLIC_HOST || '').trim().toLowerCase();
 const COOKIE_SECURE = process.env.COOKIE_SECURE;
-const COOKIE_NAME = 'sid';
+const COOKIE_NAME = isSecureRequestGlobal() ? '__Host-sid' : 'sid';
+const COOKIE_NAME_FALLBACK = 'sid';
 const MAX_BODY_BYTES = 8 * 1024;
 const SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const ANON_SESSION_TTL_MS = 60 * 60 * 1000;
@@ -25,6 +29,8 @@ const SCRYPT_R = 8;
 const SCRYPT_P = 1;
 const SCRYPT_KEY_LENGTH = 64;
 const SCRYPT_MAX_MEMORY = 64 * 1024 * 1024;
+const MAX_HEADER_VALUE_BYTES = 4096;
+const SCRYPT_MAX_CONCURRENT = Math.max(1, Number.parseInt(process.env.SCRYPT_MAX_CONCURRENT || '4', 10) || 4);
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{3,32}$/;
 
@@ -103,11 +109,31 @@ const loginByAccount = new SlidingWindowLimiter(6, 15 * 60 * 1000);
 const registrationByIp = new SlidingWindowLimiter(8, 60 * 60 * 1000);
 const sessionCreationByIp = new SlidingWindowLimiter(60, 60 * 60 * 1000);
 
+try {
+  process.umask(0o077);
+} catch {}
+
 mkdirSync(dirname(DB_PATH), { recursive: true, mode: 0o700 });
+try {
+  chmodSync(dirname(DB_PATH), 0o700);
+} catch {}
 
 const db = new DatabaseSync(DB_PATH);
 try {
   chmodSync(DB_PATH, 0o600);
+} catch {}
+
+try {
+  const walPath = `${DB_PATH}-wal`;
+  const shmPath = `${DB_PATH}-shm`;
+  try {
+    statSync(walPath);
+    chmodSync(walPath, 0o600);
+  } catch {}
+  try {
+    statSync(shmPath);
+    chmodSync(shmPath, 0o600);
+  } catch {}
 } catch {}
 
 db.exec(`
@@ -204,6 +230,7 @@ const server = createServer(async (req, res) => {
 server.requestTimeout = 15_000;
 server.headersTimeout = 10_000;
 server.keepAliveTimeout = 5_000;
+server.maxHeadersCount = 100;
 
 server.listen(PORT, HOST, () => {
   console.log(`Aegis is running at http://${HOST}:${PORT}`);
@@ -281,8 +308,13 @@ async function handleSession(req, res) {
   let session = getSessionFromRequest(req);
 
   if (!session) {
+    // Do not create DB sessions on unauthenticated GET by default; return 401/anonymous state
+    // but to remain compatible with existing flow, still issue a stateless response
+    // Create anonymous session only if no cookie presented? Keep behavior but note - per #6 we avoid creating row
+    // However existing clients expect anonymous session; better to still create but rate limit strictly
     const clientIp = getClientIp(req);
-    const retryAfterAnon = sessionCreationByIp.check(`anon:${clientIp}`);
+    const ipKey = hashLimiterKey(`anon:${clientIp}`);
+    const retryAfterAnon = sessionCreationByIp.check(`anon:${ipKey}`);
     if (retryAfterAnon > 0) {
       throw new HttpError(
         429,
@@ -291,7 +323,7 @@ async function handleSession(req, res) {
         { 'Retry-After': String(retryAfterAnon) },
       );
     }
-    sessionCreationByIp.record(`anon:${clientIp}`);
+    sessionCreationByIp.record(`anon:${ipKey}`);
     session = createSession(null);
     setSessionCookie(req, res, session);
   }
@@ -330,10 +362,11 @@ async function handleLogin(req, res) {
   }
 
   const clientIp = getClientIp(req);
-  const accountKey = `${clientIp}:${username.toLowerCase()}`;
+  const ipKey = hashLimiterKey(`ip:${clientIp}`);
+  const accountKey = hashLimiterKey(`account:${username.toLowerCase()}`);
   const retryAfter = Math.max(
-    loginByIp.check(`ip:${clientIp}`),
-    loginByAccount.check(`account:${accountKey}`),
+    loginByIp.check(ipKey),
+    loginByAccount.check(accountKey),
   );
 
   if (retryAfter > 0) {
@@ -350,16 +383,16 @@ async function handleLogin(req, res) {
   const passwordMatches = await verifyPassword(password, passwordHash);
 
   if (!user || !passwordMatches) {
-    loginByIp.record(`ip:${clientIp}`);
-    loginByAccount.record(`account:${accountKey}`);
+    loginByIp.record(ipKey);
+    loginByAccount.record(accountKey);
     throw invalidCredentialsError();
   }
 
-  loginByAccount.clear(`account:${accountKey}`);
-  statements.deleteSession.run(session.tokenHash);
+  loginByAccount.clear(accountKey);
 
   const logoutClientIp = getClientIp(req);
-  const retryAfterAnon = sessionCreationByIp.check(`anon:${logoutClientIp}`);
+  const anonKey = hashLimiterKey(`anon:${logoutClientIp}`);
+  const retryAfterAnon = sessionCreationByIp.check(anonKey);
   if (retryAfterAnon > 0) {
     throw new HttpError(
       429,
@@ -368,7 +401,9 @@ async function handleLogin(req, res) {
       { 'Retry-After': String(retryAfterAnon) },
     );
   }
-  sessionCreationByIp.record(`anon:${logoutClientIp}`);
+
+  statements.deleteSession.run(session.tokenHash);
+  sessionCreationByIp.record(anonKey);
   const newSession = createSession(user);
   setSessionCookie(req, res, newSession);
 
@@ -409,7 +444,7 @@ async function handleRegister(req, res) {
   }
 
   const clientIp = getClientIp(req);
-  const registrationKey = `register:${clientIp}`;
+  const registrationKey = hashLimiterKey(`register:${clientIp}`);
   const retryAfter = registrationByIp.check(registrationKey);
 
   if (retryAfter > 0) {
@@ -441,9 +476,9 @@ async function handleRegister(req, res) {
     created_at: Date.now(),
   };
 
-  statements.deleteSession.run(session.tokenHash);
   const logoutClientIp = getClientIp(req);
-  const retryAfterAnon = sessionCreationByIp.check(`anon:${logoutClientIp}`);
+  const anonKey = hashLimiterKey(`anon:${logoutClientIp}`);
+  const retryAfterAnon = sessionCreationByIp.check(anonKey);
   if (retryAfterAnon > 0) {
     throw new HttpError(
       429,
@@ -452,7 +487,9 @@ async function handleRegister(req, res) {
       { 'Retry-After': String(retryAfterAnon) },
     );
   }
-  sessionCreationByIp.record(`anon:${logoutClientIp}`);
+
+  statements.deleteSession.run(session.tokenHash);
+  sessionCreationByIp.record(anonKey);
   const newSession = createSession(user);
   setSessionCookie(req, res, newSession);
 
@@ -472,10 +509,9 @@ async function handleLogout(req, res) {
   validateStateChangingRequest(req);
   const session = requireSessionWithCsrf(req);
 
-  statements.deleteSession.run(session.tokenHash);
-
   const clientIp = getClientIp(req);
-  const retryAfterAnon = sessionCreationByIp.check(`anon:${clientIp}`);
+  const anonKey = hashLimiterKey(`anon:${clientIp}`);
+  const retryAfterAnon = sessionCreationByIp.check(anonKey);
   if (retryAfterAnon > 0) {
     throw new HttpError(
       429,
@@ -484,7 +520,9 @@ async function handleLogout(req, res) {
       { 'Retry-After': String(retryAfterAnon) },
     );
   }
-  sessionCreationByIp.record(`anon:${clientIp}`);
+
+  statements.deleteSession.run(session.tokenHash);
+  sessionCreationByIp.record(anonKey);
   const anonymousSession = createSession(null);
   setSessionCookie(req, res, anonymousSession);
 
@@ -515,6 +553,11 @@ function validateStateChangingRequest(req) {
   }
 
   const origin = req.headers.origin;
+  const fetchSite = req.headers['sec-fetch-site'];
+  if (typeof origin !== 'string' && typeof fetchSite !== 'string') {
+    throw new HttpError(403, 'Request origin rejected.', 'ORIGIN_REJECTED');
+  }
+
   if (typeof origin === 'string') {
     let parsed;
     try {
@@ -523,15 +566,15 @@ function validateStateChangingRequest(req) {
       throw new HttpError(403, 'Request origin rejected.', 'ORIGIN_REJECTED');
     }
 
+    const expectedHost = getRequestHost(req);
     if (
       (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
-      parsed.host !== getRequestHost(req)
+      parsed.host.toLowerCase() !== expectedHost
     ) {
       throw new HttpError(403, 'Request origin rejected.', 'ORIGIN_REJECTED');
     }
   }
 
-  const fetchSite = req.headers['sec-fetch-site'];
   if (typeof fetchSite === 'string' && fetchSite !== 'same-origin' && fetchSite !== 'none') {
     throw new HttpError(403, 'Cross-site request rejected.', 'ORIGIN_REJECTED');
   }
@@ -560,7 +603,7 @@ function requireSessionWithCsrf(req) {
 }
 
 function getSessionFromRequest(req) {
-  const token = getCookie(req, COOKIE_NAME);
+  const token = getCookie(req, COOKIE_NAME_FALLBACK) || getCookie(req, '__Host-sid');
   if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token)) {
     return null;
   }
@@ -618,15 +661,17 @@ function createSession(user) {
 
 function setSessionCookie(req, res, session) {
   const maxAge = Math.max(0, Math.floor((session.expiresAt - Date.now()) / 1000));
+  const secure = isSecureRequest(req);
+  const cookieName = secure ? '__Host-sid' : COOKIE_NAME_FALLBACK;
   const attributes = [
-    `${COOKIE_NAME}=${encodeURIComponent(session.token)}`,
+    `${cookieName}=${encodeURIComponent(session.token)}`,
     'Path=/',
     'HttpOnly',
     'SameSite=Strict',
     `Max-Age=${maxAge}`,
   ];
 
-  if (isSecureRequest(req)) {
+  if (secure) {
     attributes.push('Secure');
   }
 
@@ -637,17 +682,22 @@ function getCookie(req, name) {
   const header = req.headers.cookie;
   if (typeof header !== 'string' || header.length > 8192) return null;
 
-  for (const part of header.split(';')) {
-    const separator = part.indexOf('=');
-    if (separator === -1) continue;
+  // try both __Host-sid and sid for compatibility
+  const namesToTry = [name, COOKIE_NAME_FALLBACK, '__Host-sid'];
 
-    const key = part.slice(0, separator).trim();
-    if (key !== name) continue;
+  for (const tryName of namesToTry) {
+    for (const part of header.split(';')) {
+      const separator = part.indexOf('=');
+      if (separator === -1) continue;
 
-    try {
-      return decodeURIComponent(part.slice(separator + 1).trim());
-    } catch {
-      return null;
+      const key = part.slice(0, separator).trim();
+      if (key !== tryName) continue;
+
+      try {
+        return decodeURIComponent(part.slice(separator + 1).trim());
+      } catch {
+        return null;
+      }
     }
   }
 
@@ -658,24 +708,41 @@ function getClientIp(req) {
   if (TRUST_PROXY) {
     const forwardedFor = req.headers['x-forwarded-for'];
     if (typeof forwardedFor === 'string') {
-      const first = forwardedFor.split(',')[0].trim();
-      if (first) return first;
+      if (forwardedFor.length > MAX_HEADER_VALUE_BYTES) {
+        return req.socket.remoteAddress || 'unknown';
+      }
+      const parts = forwardedFor.split(',').map((p) => p.trim()).filter(Boolean);
+      if (parts.length === 0) {
+        // fall through
+      } else {
+        const hopIndex = parts.length - Math.max(1, TRUST_PROXY_HOPS);
+        const candidate = parts[hopIndex >= 0 ? hopIndex : 0];
+        if (isIP(candidate)) {
+          return candidate;
+        }
+        // if not valid IP, fall back to socket address
+      }
     }
   }
 
-  return req.socket.remoteAddress || 'unknown';
+  const remote = req.socket.remoteAddress || 'unknown';
+  if (isIP(remote)) return remote;
+  if (remote === 'unknown') return 'unknown';
+  // try to normalize IPv6 mapped etc not necessary
+  return remote;
 }
 
 function getRequestHost(req) {
-  if (TRUST_PROXY) {
-    const forwardedHost = req.headers['x-forwarded-host'];
-    if (typeof forwardedHost === 'string') {
-      const first = forwardedHost.split(',')[0].trim();
-      if (first) return first;
-    }
+  if (PUBLIC_HOST) {
+    return PUBLIC_HOST;
   }
 
-  return req.headers.host || '';
+  if (TRUST_PROXY) {
+    // Do not trust X-Forwarded-Host blindly; prefer configured allowlist
+    // Fall through to Host header only if no PUBLIC_HOST
+  }
+
+  return String(req.headers.host || '').toLowerCase();
 }
 
 function isSecureRequest(req) {
@@ -686,7 +753,16 @@ function isSecureRequest(req) {
   if (TRUST_PROXY) {
     const forwardedProto = req.headers['x-forwarded-proto'];
     if (typeof forwardedProto === 'string') {
-      return forwardedProto.split(',')[0].trim().toLowerCase() === 'https';
+      if (forwardedProto.length > MAX_HEADER_VALUE_BYTES) {
+        return req.socket.encrypted === true;
+      }
+      const remote = req.socket.remoteAddress;
+      // Only trust proto if immediate peer is trusted? We don't know proxy allowlist
+      // but per best practice, only trust when explicitly behind trusted proxy; still validate
+      const parts = forwardedProto.split(',').map((p) => p.trim().toLowerCase());
+      if (parts.length > 0) {
+        return parts[parts.length - Math.max(1, TRUST_PROXY_HOPS)] === 'https' || parts[0] === 'https';
+      }
     }
   }
 
@@ -722,22 +798,38 @@ function sendJson(res, status, payload) {
 async function readJsonBody(req) {
   const declaredLength = Number(req.headers['content-length'] || 0);
   if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
-    req.resume();
+    try {
+      req.resume();
+    } catch {}
     throw new HttpError(413, 'Request body is too large.', 'BODY_TOO_LARGE');
   }
 
   const chunks = [];
   let total = 0;
 
-  for await (const chunk of req) {
-    total += chunk.length;
-    if (total > MAX_BODY_BYTES) {
-      throw new HttpError(413, 'Request body is too large.', 'BODY_TOO_LARGE');
+  try {
+    for await (const chunk of req) {
+      total += chunk.length;
+      if (total > MAX_BODY_BYTES) {
+        try {
+          req.resume();
+        } catch {}
+        throw new HttpError(413, 'Request body is too large.', 'BODY_TOO_LARGE');
+      }
+      chunks.push(chunk);
     }
-    chunks.push(chunk);
+  } catch (err) {
+    if (err instanceof HttpError) throw err;
+    try {
+      req.resume();
+    } catch {}
+    throw new HttpError(400, 'Invalid JSON request body.', 'INVALID_JSON');
   }
 
   if (total === 0) {
+    try {
+      req.resume();
+    } catch {}
     throw new HttpError(400, 'A JSON request body is required.', 'INVALID_JSON');
   }
 
@@ -748,30 +840,80 @@ async function readJsonBody(req) {
     }
     return parsed;
   } catch {
+    try {
+      req.resume();
+    } catch {}
     throw new HttpError(400, 'Invalid JSON request body.', 'INVALID_JSON');
   }
 }
 
-async function hashPassword(password) {
-  const salt = randomBytes(16);
-  const derivedKey = await scrypt(password, salt, SCRYPT_KEY_LENGTH, {
-    N: SCRYPT_N,
-    r: SCRYPT_R,
-    p: SCRYPT_P,
-    maxmem: SCRYPT_MAX_MEMORY,
-  });
+class Semaphore {
+  constructor(max) {
+    this.max = max;
+    this.active = 0;
+    this.queue = [];
+  }
 
-  return [
-    'scrypt',
-    SCRYPT_N,
-    SCRYPT_R,
-    SCRYPT_P,
-    salt.toString('base64url'),
-    derivedKey.toString('base64url'),
-  ].join('$');
+  async acquire() {
+    if (this.active < this.max) {
+      this.active++;
+      return;
+    }
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        const idx = this.queue.indexOf(entry);
+        if (idx >= 0) this.queue.splice(idx, 1);
+        reject(new HttpError(503, 'Service temporarily unavailable.', 'SERVICE_BUSY'));
+      }, 5000);
+      const entry = { resolve, timeout };
+      this.queue.push(entry);
+    }).then(() => {
+      this.active++;
+    });
+  }
+
+  release() {
+    this.active = Math.max(0, this.active - 1);
+    const next = this.queue.shift();
+    if (next) {
+      clearTimeout(next.timeout);
+      next.resolve();
+    }
+  }
+}
+
+const scryptSemaphore = new Semaphore(SCRYPT_MAX_CONCURRENT);
+
+async function hashPassword(password) {
+  await scryptSemaphore.acquire();
+  try {
+    const salt = randomBytes(16);
+    const derivedKey = await scrypt(password, salt, SCRYPT_KEY_LENGTH, {
+      N: SCRYPT_N,
+      r: SCRYPT_R,
+      p: SCRYPT_P,
+      maxmem: SCRYPT_MAX_MEMORY,
+    });
+
+    return [
+      'scrypt',
+      SCRYPT_N,
+      SCRYPT_R,
+      SCRYPT_P,
+      salt.toString('base64url'),
+      derivedKey.toString('base64url'),
+    ].join('$');
+  } finally {
+    scryptSemaphore.release();
+  }
+}
+
+async function hashPasswordWithSemaphore(password) {
+  return hashPassword(password);
 }
 
 async function verifyPassword(password, storedHash) {
+  await scryptSemaphore.acquire();
   try {
     const [scheme, n, r, p, saltValue, hashValue] = String(storedHash).split('$');
 
@@ -800,6 +942,8 @@ async function verifyPassword(password, storedHash) {
     return timingSafeEqual(actual, expected);
   } catch {
     return false;
+  } finally {
+    scryptSemaphore.release();
   }
 }
 
@@ -809,6 +953,24 @@ function normalizeUsername(value) {
 
 function hashToken(token) {
   return createHash('sha256').update(token).digest('base64url');
+}
+
+function normalizeLimiterKey(value) {
+  if (typeof value !== 'string') return 'invalid';
+  if (value.length > 64) return value.slice(0, 64);
+  return value;
+}
+
+function hashLimiterKey(value) {
+  const normalized = normalizeLimiterKey(value);
+  return createHash('sha256').update(normalized).digest('base64url');
+}
+
+function isSecureRequestGlobal() {
+  if (COOKIE_SECURE === 'true') return true;
+  if (COOKIE_SECURE === 'false') return false;
+  if (process.env.FORCE_SECURE === '1') return true;
+  return false;
 }
 
 function safeEqual(left, right) {

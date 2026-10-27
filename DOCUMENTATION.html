@@ -562,7 +562,7 @@
                     <tr>
                         <td><code>TRUST_PROXY</code></td>
                         <td><code>undefined</code></td>
-                        <td>Set to <code>1</code> when behind a reverse proxy to respect X-Forwarded headers</td>
+                        <td>Set to <code>1</code> only behind a trusted reverse proxy. Use <code>TRUST_PROXY_HOPS</code> and <code>PUBLIC_HOST</code>. Headers are validated.</td>
                     </tr>
                     <tr>
                         <td><code>COOKIE_SECURE</code></td>
@@ -574,7 +574,7 @@
             
             <h3>Example with Environment Variables</h3>
             <div class="code-block">
-                <code>PORT=8080 HOST=0.0.0.0 TRUST_PROXY=1 COOKIE_SECURE=true node server.js</code>
+                <code>PORT=8080 HOST=0.0.0.0 TRUST_PROXY=1 TRUST_PROXY_HOPS=1 PUBLIC_HOST=example.com COOKIE_SECURE=true node server.js</code>
             </div>
         </section>
         

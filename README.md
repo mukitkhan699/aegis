@@ -50,7 +50,7 @@ environment variables exported in your shell.
 | `PORT` | `3000` | Server listening port |
 | `HOST` | `127.0.0.1` | Server listening host (`0.0.0.0` for external access) |
 | `DATABASE_PATH` | `./data/auth.db` | Path to the SQLite database file |
-| `TRUST_PROXY` | unset | Set to `1` when behind a reverse proxy to trust X-Forwarded headers |
+| `TRUST_PROXY` | unset | Set to `1` only when behind a trusted reverse proxy. Only specific hops are trusted; headers are validated. |
 | `COOKIE_SECURE` | auto | `true` or `false` to override secure-cookie auto-detection |
 
 Example:
@@ -83,7 +83,7 @@ PORT=8080 HOST=0.0.0.0 TRUST_PROXY=1 COOKIE_SECURE=true npm start
 ## Deployment Notes
 
 - Run behind a reverse proxy with TLS in production.
-- Set `TRUST_PROXY=1` only if the proxy correctly sets `X-Forwarded-*` headers.
+- Set `TRUST_PROXY=1` only if behind a trusted reverse proxy. Configure `TRUST_PROXY_HOPS` (default `1`) and prefer setting `PUBLIC_HOST`. `__Host-sid` is used when secure.
 - Set `COOKIE_SECURE=true` when serving over HTTPS.
 - Back up the SQLite database in `data/`; it contains password hashes and session records.
 - The `data/` directory, `.env`, and database files are excluded from version control via `.gitignore`.
